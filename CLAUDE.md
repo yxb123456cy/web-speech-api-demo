@@ -6,7 +6,9 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 A learning/demo repo for the **Web Speech API** (语音识别 `SpeechRecognition` + 语音合成 `SpeechSynthesis`), built on the official `vue-ts` scaffold. The scaffold's boilerplate (`HelloWorld`, `TheWelcome`, `AboutView`, `stores/counter.ts`) has been deleted — `src/` now contains only real project code.
 
-Current state: the **语音合成 (SpeechSynthesis)** demo is done and lives at route `/synthesis` (`src/views/SpeechSynthesisView.vue`). 语音识别 is not started yet.
+Current state: the **语音合成 (SpeechSynthesis)** demo is done and lives at route `/synthesis` (`src/views/SpeechSynthesisView.vue`), backed by the reusable composable `src/composables/useSpeechSynthesis.ts`. 语音识别 is not started yet.
+
+`useSpeechSynthesis()` is the single entry point for TTS — use it instead of touching `window.speechSynthesis` directly. It owns the `voiceschanged` listener, mirrors `speaking` / `paused` / `pendingCount` into refs, splits long text into sentence-sized utterances (Chrome silently truncates a single utterance after ~15s), and distinguishes a user-initiated `cancel()` from a real error via an internal `canceledByUser` flag. It also exports `chunkText()` and the `ERROR_TEXT` code→message map.
 
 ## Commands
 

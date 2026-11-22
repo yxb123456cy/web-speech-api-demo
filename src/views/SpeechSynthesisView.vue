@@ -1,107 +1,74 @@
 <script setup lang="ts">
-import { onBeforeUnmount, onMounted, ref } from "vue";
-// 准备朗读的文本;
-const text = ref("你好,这是 Web Speech API 的语音合成示例。");
-// 语速;
-const rate = ref(1);
-// SpeechSynthesisVoice
-// 音色;
-const voices = ref<SpeechSynthesisVoice[]>([]);
-const voiceURI = ref("");
-const status = ref("就绪");
-// 是否停止;
-const stoppedByUser = ref(false);
+import { computed, ref, watch } from 'vue'
+import { ERROR_TEXT, useSpeechSynthesis } from '@/composables/useSpeechSynthesis'
 
-// 语音合成错误码 → 中文说明。
-// 这里刻意用 Record<string, string> 而不是精确联合类型:TS 的 SpeechSynthesisErrorCode
-// 把 "language-unavailable" 误写成了 "language&available",按联合类型穷举会对不上。
-const ERROR_TEXT: Record<string, string> = {
-  "audio-busy": "音频输出设备忙",
-  "audio-hardware": "音频硬件异常",
-  canceled: "朗读被取消",
-  interrupted: "朗读被打断",
-  network: "网络错误",
-  "not-allowed": "权限被拒绝",
-  "synthesis-failed": "语音合成失败",
-  "synthesis-unavailable": "语音合成服务不可用",
-  "text-too-long": "文本过长",
-  "voice-unavailable": "所选语音不可用",
-  "invalid-argument": "参数非法",
-};
+// 准备朗读的文本
+const text = ref('你好,这是 Web Speech API 的语音合成示例。')
+// 语速
+const rate = ref(1)
+// 选中的音色 voiceURI
+const voiceURI = ref('')
+// 状态文案
+const status = ref('就绪')
 
-//加载可用的语音列表;
-function loadVoices() {
-  // 获取可用的语音列表;
-  voices.value = speechSynthesis.getVoices();
-  console.log(voices.value);
-  // 默认挑一个中文语音,没有就退回列表第一个
-  if (!voiceURI.value && voices.value.length > 0) {
-    const zh = voices.value.find((v) => v.lang.startsWith("zh"));
-    voiceURI.value = (zh ?? voices.value[0])?.voiceURI ?? "";
-  }
-}
+const {
+  voices,
+  isSpeaking,
+  isPaused,
+  pendingCount,
+  speak: speakText,
+  stop: stopSpeak,
+  pause,
+  resume,
+  findVoice,
+} = useSpeechSynthesis()
 
-onMounted(() => {
-  loadVoices();
-  // getVoices() 是异步的:首次调用通常返回空数组,
-  // 真正的语音列表要靠 voiceschanged 事件异步送达。
-  // 语音列表变化事件监听
-  speechSynthesis.addEventListener("voiceschanged", loadVoices);
-});
+// 音色列表是异步送达的,拿到之后默认挑一个中文语音,没有就退回列表第一个
+watch(
+  voices,
+  (list) => {
+    if (!voiceURI.value && list.length > 0) {
+      const zh = list.find((v) => v.lang.startsWith('zh'))
+      voiceURI.value = (zh ?? list[0])?.voiceURI ?? ''
+    }
+  },
+  { immediate: true },
+)
 
-onBeforeUnmount(() => {
-  // 卸载事件;
-  speechSynthesis.removeEventListener("voiceschanged", loadVoices);
-  // 取消所有队列中的语音
-  speechSynthesis.cancel();
-});
+// 当前选中的音色
+const selectedVoice = computed(() => findVoice(voiceURI.value) ?? null)
 
 function speak() {
-  if (!text.value.trim()) {
-    status.value = "没有可朗读的文本";
-    return;
-  }
-
-  stoppedByUser.value = false;
-  // 丢弃队列里还没念完的内容,避免文字越积越多
-  speechSynthesis.cancel();
-  // SpeechSynthesisUtterance 表示一个语音请求，包含了要朗读的文本内容以及如何朗读的配置参数。
-  const utterance = new SpeechSynthesisUtterance(text.value);
-  utterance.lang = "zh-CN";
-  utterance.rate = rate.value;
-  // utterance.pitch; //设置音调;
-  // utterance.volume; // 设置音量;
-  // 先设 lang 再设 voice:voice 会用自己的 lang 覆盖掉上面的值
-  const voice = voices.value.find((v) => v.voiceURI === voiceURI.value);
-  if (voice) {
-    utterance.voice = voice;
-  }
-  // 开始播放时 触发;
-  utterance.onstart = () => {
-    status.value = "朗读中…";
-  };
-  // 语音播放完成时触发
-  utterance.onend = () => {
-    status.value = "朗读完成";
-  };
-  // 播放过程中出现错误时触发
-  utterance.onerror = (event) => {
-    // 用户主动 cancel() 同样会触发 error(canceled),那不算故障
-    if (stoppedByUser.value || event.error === "canceled") {
-      status.value = "已停止";
-      return;
-    }
-    status.value = `出错:${event.error} —— ${ERROR_TEXT[event.error] ?? "未知错误"}`;
-  };
-  // 开始播放;
-  speechSynthesis.speak(utterance);
+  speakText(text.value, {
+    // 先设 lang 再设 voice:voice 会用自己的 lang 覆盖掉它
+    lang: 'zh-CN',
+    voice: selectedVoice.value,
+    rate: rate.value,
+    onstart: () => {
+      status.value = '朗读中…'
+    },
+    onend: () => {
+      status.value = '朗读完成'
+    },
+    onerror: (code) => {
+      status.value = `出错:${code} —— ${ERROR_TEXT[code] ?? '未知错误'}`
+    },
+  })
 }
 
 function stop() {
-  stoppedByUser.value = true;
-  // 取消所有队列中的语音
-  speechSynthesis.cancel();
-  status.value = "已停止";
+  stopSpeak()
+  status.value = '已停止'
+}
+
+function togglePause() {
+  if (isPaused.value) {
+    resume()
+    status.value = '朗读中…'
+  } else {
+    pause()
+    status.value = '已暂停'
+  }
 }
 </script>
 
@@ -109,7 +76,7 @@ function stop() {
   <section>
     <h1>语音合成 SpeechSynthesis</h1>
     <p class="hint">
-      用 <code>SpeechSynthesisUtterance</code> 把一段文字交给浏览器念出来:
+      通用封装在 <code>src/composables/useSpeechSynthesis.ts</code>。底层流程还是那三步:
       <code>new SpeechSynthesisUtterance(text)</code> → 设参数 →
       <code>speechSynthesis.speak(u)</code>。
     </p>
@@ -125,7 +92,7 @@ function stop() {
         <select id="tts-voice" name="voice" v-model="voiceURI">
           <option value="">自动选择</option>
           <option v-for="v in voices" :key="v.voiceURI" :value="v.voiceURI">
-            {{ v.name }}({{ v.lang }}){{ v.localService ? "" : " · 网络" }}
+            {{ v.name }}({{ v.lang }}){{ v.localService ? '' : ' · 网络' }}
           </option>
         </select>
       </label>
@@ -145,23 +112,34 @@ function stop() {
     </div>
 
     <div class="actions">
-      <button type="button" @click="speak">朗读</button>
-      <button type="button" class="ghost" @click="stop">停止</button>
+      <button type="button" :disabled="isSpeaking" @click="speak">朗读</button>
+      <button type="button" class="ghost" :disabled="!isSpeaking" @click="togglePause">
+        {{ isPaused ? '继续' : '暂停' }}
+      </button>
+      <button type="button" class="ghost" :disabled="!isSpeaking && !pendingCount" @click="stop">
+        停止
+      </button>
     </div>
 
-    <p class="status">状态:{{ status }}</p>
+    <p class="status">
+      状态:{{ status }}
+      <span v-if="pendingCount > 0" class="status__queue">队列剩余 {{ pendingCount }} 条</span>
+    </p>
 
     <aside class="note">
-      <strong>三个容易踩的坑</strong>
+      <strong>三个容易踩的坑(composable 都处理了)</strong>
       <ol>
         <li>
           <code>getVoices()</code> 首次调用返回空数组是正常的,得监听 <code>voiceschanged</code>。
         </li>
         <li>
           主动调 <code>cancel()</code> 会触发 <code>error</code> 事件,错误码是
-          <code>canceled</code>。
+          <code>canceled</code> —— 用 <code>canceledByUser</code> 标记区分,不算故障。
         </li>
-        <li>Chrome 会静默截断超过约 15 秒的单条朗读,长文本要按句拆分入队。</li>
+        <li>
+          Chrome 会静默截断超过约 15 秒的单条朗读。composable 会按句拆成多条依次入队,
+          所以状态栏会显示「队列剩余 N 条」。
+        </li>
       </ol>
     </aside>
   </section>
@@ -238,9 +216,20 @@ button.ghost {
   color: var(--color-text);
 }
 
+button:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
 .status {
   margin-top: 1rem;
   font-weight: 600;
+}
+
+.status__queue {
+  margin-left: 0.75rem;
+  font-weight: 400;
+  opacity: 0.7;
 }
 
 .note {
