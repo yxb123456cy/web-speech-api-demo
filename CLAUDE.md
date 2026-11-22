@@ -4,7 +4,9 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project purpose
 
-A learning/demo repo for the **Web Speech API** (语音识别 `SpeechRecognition` + 语音合成 `SpeechSynthesis`), sitting on the official `vue-ts` scaffold. The scaffold's own demo content (`HelloWorld`, `TheWelcome`, `AboutView`, `stores/counter.ts`) is boilerplate — replace it, don't build on it.
+A learning/demo repo for the **Web Speech API** (语音识别 `SpeechRecognition` + 语音合成 `SpeechSynthesis`), built on the official `vue-ts` scaffold. The scaffold's boilerplate (`HelloWorld`, `TheWelcome`, `AboutView`, `stores/counter.ts`) has been deleted — `src/` now contains only real project code.
+
+Current state: the **语音合成 (SpeechSynthesis)** demo is done and lives at route `/synthesis` (`src/views/SpeechSynthesisView.vue`). 语音识别 is not started yet.
 
 ## Commands
 
@@ -32,7 +34,7 @@ Package manager is **pnpm** (lockfile v9). There is no `packageManager` field in
 - **Path alias** — `@` → `src`, declared in *both* `vite.config.ts` (`resolve.alias`) and `tsconfig.app.json` (`paths`). Import as `@/foo/bar`, never `../../foo/bar`.
 - **TS project references** — root `tsconfig.json` is a solution file pointing at `tsconfig.app.json` (DOM lib) and `tsconfig.node.json` (Node/tooling config files). `vue-tsc --build` type-checks both.
 - `tsconfig.app.json` extends `@vue/tsconfig/tsconfig.dom.json` and enables **`noUncheckedIndexedAccess`** — array index access is typed `T | undefined`. This bites directly in speech code, where `results[i]` and `alternatives[j]` are the normal access pattern.
-- **Global design tokens** live in `src/assets/base.css` (`--color-text`, `--color-border`, `--vt-c-*` palette); `src/assets/main.css` is imported once in `main.ts`. The template's `App.vue` styles reference these variables.
+- **Global design tokens** live in `src/assets/base.css` (`--color-text`, `--color-heading`, `--color-border`, `--color-background-mute`, plus the raw `--vt-c-*` palette). `base.css` also carries the `prefers-color-scheme: dark` overrides and the global reset; `src/assets/main.css` is imported once in `main.ts` and only adds `#app` sizing. Use the semantic `--color-*` tokens in components rather than the raw `--vt-c-*` palette, so dark mode keeps working.
 - `vite-plugin-vue-devtools` is enabled in `vite.config.ts` and injects its overlay during `pnpm dev`.
 
 ## Tooling conventions
@@ -50,7 +52,7 @@ The point of this repo — read this before writing any speech code.
 
 TypeScript 6.0's `lib.dom.d.ts` provides:
 
-- ✅ `SpeechSynthesis`, `SpeechSynthesisUtterance`, `SpeechSynthesisVoice`, `SpeechSynthesisEvent`, `SpeechSynthesisErrorEvent`
+- ✅ `SpeechSynthesis`, `SpeechSynthesisUtterance`, `SpeechSynthesisVoice`, `SpeechSynthesisEvent`, `SpeechSynthesisErrorEvent` (the `SpeechSynthesisErrorCode` union in TS 6 misspells `"language-unavailable"` as `"language&available"` and omits the correct spelling — do not exhaustively switch on that union)
 - ✅ recognition **data/event** types: `SpeechRecognitionEvent`, `SpeechRecognitionResult`, `SpeechRecognitionResultList`, `SpeechRecognitionAlternative`, `SpeechRecognitionErrorEvent`, `SpeechRecognitionErrorCode`
 - ❌ **not** the `SpeechRecognition` **controller** interface, and not `SpeechGrammarList` / `SpeechGrammar`
 
