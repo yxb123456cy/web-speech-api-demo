@@ -1,94 +1,107 @@
 <script setup lang="ts">
-import { onBeforeUnmount, onMounted, ref } from 'vue'
-
-const text = ref('你好,这是 Web Speech API 的语音合成示例。')
-const rate = ref(1)
-const voices = ref<SpeechSynthesisVoice[]>([])
-const voiceURI = ref('')
-const status = ref('就绪')
-const stoppedByUser = ref(false)
+import { onBeforeUnmount, onMounted, ref } from "vue";
+// 准备朗读的文本;
+const text = ref("你好,这是 Web Speech API 的语音合成示例。");
+// 语速;
+const rate = ref(1);
+// SpeechSynthesisVoice
+// 音色;
+const voices = ref<SpeechSynthesisVoice[]>([]);
+const voiceURI = ref("");
+const status = ref("就绪");
+// 是否停止;
+const stoppedByUser = ref(false);
 
 // 语音合成错误码 → 中文说明。
 // 这里刻意用 Record<string, string> 而不是精确联合类型:TS 的 SpeechSynthesisErrorCode
 // 把 "language-unavailable" 误写成了 "language&available",按联合类型穷举会对不上。
 const ERROR_TEXT: Record<string, string> = {
-  'audio-busy': '音频输出设备忙',
-  'audio-hardware': '音频硬件异常',
-  canceled: '朗读被取消',
-  interrupted: '朗读被打断',
-  network: '网络错误',
-  'not-allowed': '权限被拒绝',
-  'synthesis-failed': '语音合成失败',
-  'synthesis-unavailable': '语音合成服务不可用',
-  'text-too-long': '文本过长',
-  'voice-unavailable': '所选语音不可用',
-  'invalid-argument': '参数非法',
-}
+  "audio-busy": "音频输出设备忙",
+  "audio-hardware": "音频硬件异常",
+  canceled: "朗读被取消",
+  interrupted: "朗读被打断",
+  network: "网络错误",
+  "not-allowed": "权限被拒绝",
+  "synthesis-failed": "语音合成失败",
+  "synthesis-unavailable": "语音合成服务不可用",
+  "text-too-long": "文本过长",
+  "voice-unavailable": "所选语音不可用",
+  "invalid-argument": "参数非法",
+};
 
+//加载可用的语音列表;
 function loadVoices() {
-  voices.value = speechSynthesis.getVoices()
-
+  // 获取可用的语音列表;
+  voices.value = speechSynthesis.getVoices();
+  console.log(voices.value);
   // 默认挑一个中文语音,没有就退回列表第一个
   if (!voiceURI.value && voices.value.length > 0) {
-    const zh = voices.value.find((v) => v.lang.startsWith('zh'))
-    voiceURI.value = (zh ?? voices.value[0])?.voiceURI ?? ''
+    const zh = voices.value.find((v) => v.lang.startsWith("zh"));
+    voiceURI.value = (zh ?? voices.value[0])?.voiceURI ?? "";
   }
 }
 
 onMounted(() => {
-  loadVoices()
+  loadVoices();
   // getVoices() 是异步的:首次调用通常返回空数组,
   // 真正的语音列表要靠 voiceschanged 事件异步送达。
-  speechSynthesis.addEventListener('voiceschanged', loadVoices)
-})
+  // 语音列表变化事件监听
+  speechSynthesis.addEventListener("voiceschanged", loadVoices);
+});
 
 onBeforeUnmount(() => {
-  speechSynthesis.removeEventListener('voiceschanged', loadVoices)
-  speechSynthesis.cancel()
-})
+  // 卸载事件;
+  speechSynthesis.removeEventListener("voiceschanged", loadVoices);
+  // 取消所有队列中的语音
+  speechSynthesis.cancel();
+});
 
 function speak() {
   if (!text.value.trim()) {
-    status.value = '没有可朗读的文本'
-    return
+    status.value = "没有可朗读的文本";
+    return;
   }
 
-  stoppedByUser.value = false
+  stoppedByUser.value = false;
   // 丢弃队列里还没念完的内容,避免文字越积越多
-  speechSynthesis.cancel()
-
-  const utterance = new SpeechSynthesisUtterance(text.value)
-  utterance.lang = 'zh-CN'
-  utterance.rate = rate.value
-
+  speechSynthesis.cancel();
+  // SpeechSynthesisUtterance 表示一个语音请求，包含了要朗读的文本内容以及如何朗读的配置参数。
+  const utterance = new SpeechSynthesisUtterance(text.value);
+  utterance.lang = "zh-CN";
+  utterance.rate = rate.value;
+  // utterance.pitch; //设置音调;
+  // utterance.volume; // 设置音量;
   // 先设 lang 再设 voice:voice 会用自己的 lang 覆盖掉上面的值
-  const voice = voices.value.find((v) => v.voiceURI === voiceURI.value)
+  const voice = voices.value.find((v) => v.voiceURI === voiceURI.value);
   if (voice) {
-    utterance.voice = voice
+    utterance.voice = voice;
   }
-
+  // 开始播放时 触发;
   utterance.onstart = () => {
-    status.value = '朗读中…'
-  }
+    status.value = "朗读中…";
+  };
+  // 语音播放完成时触发
   utterance.onend = () => {
-    status.value = '朗读完成'
-  }
+    status.value = "朗读完成";
+  };
+  // 播放过程中出现错误时触发
   utterance.onerror = (event) => {
     // 用户主动 cancel() 同样会触发 error(canceled),那不算故障
-    if (stoppedByUser.value || event.error === 'canceled') {
-      status.value = '已停止'
-      return
+    if (stoppedByUser.value || event.error === "canceled") {
+      status.value = "已停止";
+      return;
     }
-    status.value = `出错:${event.error} —— ${ERROR_TEXT[event.error] ?? '未知错误'}`
-  }
-
-  speechSynthesis.speak(utterance)
+    status.value = `出错:${event.error} —— ${ERROR_TEXT[event.error] ?? "未知错误"}`;
+  };
+  // 开始播放;
+  speechSynthesis.speak(utterance);
 }
 
 function stop() {
-  stoppedByUser.value = true
-  speechSynthesis.cancel()
-  status.value = '已停止'
+  stoppedByUser.value = true;
+  // 取消所有队列中的语音
+  speechSynthesis.cancel();
+  status.value = "已停止";
 }
 </script>
 
@@ -112,7 +125,7 @@ function stop() {
         <select id="tts-voice" name="voice" v-model="voiceURI">
           <option value="">自动选择</option>
           <option v-for="v in voices" :key="v.voiceURI" :value="v.voiceURI">
-            {{ v.name }}({{ v.lang }}){{ v.localService ? '' : ' · 网络' }}
+            {{ v.name }}({{ v.lang }}){{ v.localService ? "" : " · 网络" }}
           </option>
         </select>
       </label>
